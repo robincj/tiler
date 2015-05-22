@@ -1,0 +1,6 @@
+[submodule "https://github.com/ashleydw/lightbox.git"]
+	path = https://github.com/ashleydw/lightbox.git
+	url = https://github.com/ashleydw/lightbox.git
+[submodule "lightbox"]
+	path = lightbox
+	url = https://github.com/ashleydw/lightbox.git
