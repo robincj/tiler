@@ -4,7 +4,9 @@ include_once 'tiler.php';
 
 $tiler = new Tiler();
 
-print $tiler->get_originalsdir();
+$tiler->originalsdir('/data/development/gitbox/undulator_website/images/photos/originals');
+$tiler->cachedir('/tmp/cache');
+
 
 /*
 $originals = "images/photos/originals";
