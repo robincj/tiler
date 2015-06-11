@@ -6,7 +6,7 @@ $tiler = new Tiler();
 
 $tiler->originalsdir('/data/development/gitbox/undulator_website/images/photos/originals');
 $tiler->cachedir('/tmp/cache');
-
+$tiler->show();
 
 /*
 $originals = "images/photos/originals";

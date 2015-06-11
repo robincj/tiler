@@ -13,29 +13,38 @@ class Tiler {
 	}
 	
 	// GETTERS AND SETTERS
-	public function cachedir($name, $val = NULL) {
-		return getset ( func_get_args () );
-	}
-	public function originalsdir($name, $val = NULL) {
-		return getset ( func_get_args () );
-	}
-	public function cacheurl($name, $val = NULL) {
-		return getset ( func_get_args () );
-	}
-	public function originalsurl($name, $val = NULL) {
-		return getset ( func_get_args () );
-	}
 	/**
 	 * simple general getter/setter
 	 */
-	private function getset($args) {
-		$name = $args [0];
-		if (count ( $args ) == 2) {
-			$this->$name = $args [1];
-		}
+	private function getset() {
+		$callers = debug_backtrace ();
+		$fname = $callers [1] ['function'];
+		$args = $callers [1] ['args'];
+		$name = lcfirst ( preg_replace ( "/^[gs]et_?/", '', $fname ) );
+		
+		if (isset ( $args [0] ))
+			$this->$name = $args [0];
+		
 		return $this->$name;
 	}
-	
+	public function cachedir() {
+		return $this->getset ();
+	}
+	public function originalsdir() {
+		return $this->getset ();
+	}
+	public function cacheurl() {
+		return $this->getset ();
+	}
+	public function originalsurl() {
+		return $this->getset ();
+	}
+	public function thumbs_bigside() {
+		return $this->getset ();
+	}
+	public function photos_bigside() {
+		return $this->getset ();
+	}
 	/**
 	 */
 	public function show() {
@@ -86,16 +95,22 @@ EOH;
 <?php
 		return $this;
 	}
+	/**
+	 * 
+	 * @param unknown $file
+	 */
+	function streamImageFromFile($file) {
+		$format = getFormatFromSuffix($file);
+		$src_img = call_user_func ( "imagecreatefrom$format", $file );
+		call_user_func ( "image$format", $src_img );
+		imagedestroy ( $src_img );
+	}
 	
 	/**
-	 * Parameters: the path to the directory that contains images, the path to the directory
-	 * in which resized image files will be placed.
-	 * We are assuming that the path will be a relative path working
-	 * both in the filesystem, and through the web for links
+	 * Creates resized photo and thumbnail cached files.
 	 *
-	 * @param unknown $pathToImages        	
-	 * @param unknown $pathToThumbs        	
-	 * @param unknown $thumbWidth        	
+	 * @param string $overwrite        	
+	 * @return array of cache filenames
 	 */
 	function createCacheFromDir($overwrite = FALSE) {
 		// open the directory
@@ -103,17 +118,17 @@ EOH;
 		$cachedFiles = array ();
 		// loop through it, looking for any/all JPG files:
 		while ( false !== ($fname = readdir ( $dir )) ) {
-			$fpath = "$pathToImages/$fname";
-			$cacheFile = cacheImage ( $fpath, $this->$thumbs_bigside (), $overwrite );
+			$original_fpath = $this->originalsdir () . "/$fname";
+			$cacheFile = cacheImage ( $original_fpath, $this->thumbs_bigside (), $overwrite );
 			if ($cacheFile)
 				$cacheFiles [] = $cacheFile;
 		}
 		// close the directory
 		closedir ( $dir );
-		return $cacheFiles [];
+		return $cacheFiles;
 	}
 	/**
-	 * Creates cached image file, returns cached file's filename with path.
+	 * Creates cached image file if it doesn't already exist, returns cached file's filename with path.
 	 *
 	 * @param unknown $fpath        	
 	 * @param unknown $bigside        	
@@ -130,27 +145,10 @@ EOH;
 		if (file_exists ( $cachefile ) && ! $overwrite)
 			return $cachefile;
 			
-			// parse path for the extension
-		$info = pathinfo ( $fpath );
-		$valid_formats = array (
-				'jpg',
-				'jpeg',
-				'png' 
-		);
-		$ext = strtolower ( $info ['extension'] );
-		if (array_key_exists ( 'extension', $info ) && in_array ( $ext, $valid_formats )) {
-			// continue only if this is a JPEG/PNG image
-			
-			$format = NULL;
-			
-			if ($ext == 'jpg' || $ext == 'jpeg')
-				$format = "jpeg";
-			elseif ($ext == 'png')
-				$format = "png";
-			
-			if ($format) {
-				// echo "Creating thumbnail for {$fname} <br />";
-				
+		$format = getFormatFromSuffix($fpath);
+		if (in_array ( $ext, array('png', 'jpeg') )) {
+			// continue only if this is a JPEG/PNG image			
+			if ($format) {				
 				// load image and get image size
 				$img = call_user_func ( "imagecreatefrom$format", $fpath );
 				$width = imagesx ( $img );
@@ -179,6 +177,26 @@ EOH;
 		} else
 			return FALSE;
 		return $cachefile;
+	}
+	/**
+	 * Returns jpeg or png depending on file format indicated by suffix.
+	 * 
+	 * @param unknown $filename        	
+	 * @return Ambigous <NULL, string>
+	 */
+	static function getFormatFromSuffix($filename) {
+		// parse path for the extension
+		$info = pathinfo ( $filename );
+		$ext = strtolower ( $info ['extension'] );
+		$format = NULL;
+		
+		if (array_key_exists ( 'extension', $info )) {
+			if ($ext == 'jpg' || $ext == 'jpeg')
+				$format = "jpeg";
+			elseif ($ext == 'png')
+				$format = "png";
+		}
+		return $format;
 	}
 }
 ?>
