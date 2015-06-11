@@ -7,6 +7,8 @@ class Tiler {
 	public $originalsurl;
 	public $thumbs_bigside = 300;
 	public $photos_bigside = 600;
+	
+	private $nextimage;
 	/**
 	 */
 	public function __construct() {
@@ -45,98 +47,91 @@ class Tiler {
 	public function photos_bigside() {
 		return $this->getset ();
 	}
+	private function nextimage() {
+		return $this->getset ();
+	}
 	/**
 	 */
-	public function show() {
-		$bigside = $this->bigside;
-		$photodir_url = $this->photodir_url;
+	public function showDir() {
 		?>
-<script type="text/javascript" src="/lightbox/dist/ekko-lightbox.min.js"></script>
-<script>
+		<script type="text/javascript" src="/lightbox/dist/ekko-lightbox.min.js"></script>
+		<script>
 		$(document).delegate('*[data-toggle="lightbox"]', 'click', function(event) {
     		event.preventDefault();
    			$(this).ekkoLightbox();
 		});
-	</script>
-<style>
-.tiler {
-	margin: 3px;
-}
-</style>
-<div id='tiler'>
+		</script>
+		<style>
+		.tiler {
+			margin: 3px;
+		}
+		</style>
+		<div id='tiler'>
 		<?php
-		foreach ( scandir ( $this->photodir ) as $file ) {
-			if (! preg_match ( "/(jpg|png|jpeg)$/i", $file ))
-				continue;
-				
-				// Syntax: getimagesize Array ( [0] => 1140 [1] => 1900 [2] => 2 [3] => width="1140" height="1900" [bits] => 8 [channels] => 3 [mime] => image/jpeg )
-			
-			$size = getimagesize ( $this->photodir . "/$file" );
-			$width = $size [0];
-			$height = $size [1];
-			$ratio = $width / $height;
-			if ($ratio >= 1) {
-				$display_width = $bigside;
-				$display_height = $height * ($bigside / $width);
-			} else {
-				$display_width = $width * ($bigside / $height);
-				$display_height = $bigside;
-			}
-			echo <<<EOH
-		<span class="tiler" >
-		<a href="$photodir_url/$file" data-toggle="lightbox" data-gallery="multiimages" data-title="Aorangi Undulator" >                              
-			<img src="$photodir_url/$file" width="$display_width" height="$display_height" />
-		</a>								
-		</span>
-EOH;
+		foreach ( scandir ( $this->originalsdir() ) as $file ) {
+			$this->show($file, $lib);
 		}
 		?>
 		</div>
-<?php
+		<?php
 		return $this;
 	}
+	
+	public function show($file, $lib=0){
+		$thumbsize = $this->thumbs_bigside();
+		$photosize = $this->photos_bigside();
+		echo <<<EOH
+		<span class="tiler" >
+		<a href="img.php?lib=$lib&imgsrc=$file&size=$photosize" data-toggle="lightbox" data-gallery="multiimages" data-title="Aorangi Undulator" >
+			<img src="img.php?lib=$lib&imgsrc=$file&size=$thumbsize" />
+		</a>
+		</span>
+EOH;
+	}
 	/**
-	 * 
-	 * @param unknown $file
+	 *
+	 * @param unknown $file        	
 	 */
 	function streamImageFromFile($file) {
-		$format = getFormatFromSuffix($file);
+		$format = getFormatFromSuffix ( $file );
 		$src_img = call_user_func ( "imagecreatefrom$format", $file );
 		call_user_func ( "image$format", $src_img );
 		imagedestroy ( $src_img );
 	}
 	
 	/**
-	 * Creates resized photo and thumbnail cached files.
+	 * Creates resized photo and thumbnail cached files from files found in the originalsdir.
 	 *
 	 * @param string $overwrite        	
 	 * @return array of cache filenames
 	 */
-	function createCacheFromDir($overwrite = FALSE) {
+	function createCacheFromDir( $overwrite = FALSE) {
 		// open the directory
 		$dir = opendir ( $this->originalsdir () );
 		$cachedFiles = array ();
 		// loop through it, looking for any/all JPG files:
 		while ( false !== ($fname = readdir ( $dir )) ) {
 			$original_fpath = $this->originalsdir () . "/$fname";
-			$cacheFile = cacheImage ( $original_fpath, $this->thumbs_bigside (), $overwrite );
-			if ($cacheFile)
-				$cacheFiles [] = $cacheFile;
+			$cacheFiles ['thumb'][] = cacheImage ( $original_fpath, TRUE, FALSE, $overwrite );
+			$cacheFiles ['photo'][] = cacheImage ( $original_fpath, FALSE, FALSE, $overwrite );			
 		}
 		// close the directory
 		closedir ( $dir );
 		return $cacheFiles;
 	}
 	/**
-	 * Creates cached image file if it doesn't already exist, returns cached file's filename with path.
+	 * Creates cached image file if it doesn't already exist.
+	 * If $stream == TRUE then streams the resized image data, else returns cached file's filename with path.
 	 *
-	 * @param unknown $fpath        	
+	 * @param unknown $fname        	
 	 * @param unknown $bigside        	
-	 * @param string $overwrite        	
+	 * @param boolean $stream        	
+	 * @param boolean $overwrite        	
 	 * @return string|boolean
 	 */
-	public function cacheImage($fpath, $bigside, $overwrite = FALSE) {
-		$fname = basename ( $fpath );
+	public function cacheImage($fname, $thumb=FALSE, $stream = FALSE, $overwrite = FALSE) {
+		$bigside = $thumb ? $this->thumbs_bigside() : $this->photos_bigside ;
+		$fpath = $this->originalsdir () . "/$fname";
 		preg_match ( "/^(\w):/", $fpath, $matches );
 		$cleanpath = preg_replace ( "/^\w:/", $matches [1], $fpath );
 		$cleanpath = preg_replace ( "/\\/", "/", $cleanpath );
@@ -144,11 +139,14 @@ EOH;
 		
 		if (file_exists ( $cachefile ) && ! $overwrite)
 			return $cachefile;
-			
-		$format = getFormatFromSuffix($fpath);
-		if (in_array ( $ext, array('png', 'jpeg') )) {
-			// continue only if this is a JPEG/PNG image			
-			if ($format) {				
+		
+		$format = getFormatFromSuffix ( $fpath );
+		if (in_array ( $ext, array (
+				'png',
+				'jpeg' 
+		) )) {
+			// continue only if this is a JPEG/PNG image
+			if ($format) {
 				// load image and get image size
 				$img = call_user_func ( "imagecreatefrom$format", $fpath );
 				$width = imagesx ( $img );
@@ -173,6 +171,9 @@ EOH;
 				
 				// save thumbnail into a file
 				call_user_func ( "image$format", $tmp_img, $cachefile );
+				// Stream the image data to output if $stream is true.
+				if ($stream)
+					call_user_func ( "image$format", $tmp_img );
 			}
 		} else
 			return FALSE;
@@ -180,7 +181,7 @@ EOH;
 	}
 	/**
 	 * Returns jpeg or png depending on file format indicated by suffix.
-	 * 
+	 *
 	 * @param unknown $filename        	
 	 * @return Ambigous <NULL, string>
 	 */
@@ -199,4 +200,5 @@ EOH;
 		return $format;
 	}
 }
+
 ?>
